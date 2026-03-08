@@ -1,0 +1,110 @@
+name: Generate Strudel JSON
+
+on:
+  # Runs when you push changes to the main/master branch
+  push:
+    branches:
+      - main
+      - master
+    # Only run the action if an audio file is added, modified, or deleted
+    paths:
+      - '**/*.wav'
+      - '**/*.WAV'
+      - '**/*.mp3'
+      - '**/*.MP3'
+      - '**/*.ogg'
+      - '**/*.OGG'
+      - '**/*.flac'
+      - '**/*.FLAC'
+  
+  # Also allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Required to commit the JSON file back to the repo
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate strudel.json
+        run: |
+          cat << 'EOF' > generate.js
+          const fs = require('fs');
+          const path = require('path');
+
+          // Grab the repository and branch from GitHub Actions environment
+          const repo = process.env.GITHUB_REPOSITORY; 
+          const branch = process.env.GITHUB_REF_NAME || 'main';
+          
+          // Construct the base raw URL
+          const baseUrl = `https://raw.githubusercontent.com/${repo}/${branch}/`;
+          
+          // Initialize JSON object with _base URL
+          const result = { "_base": baseUrl };
+          const extensions = ['.wav', '.mp3', '.ogg', '.flac', '.aif', '.aiff'];
+
+          // Recursive function to find all files
+          function walk(dir) {
+            const files = fs.readdirSync(dir);
+            for (const file of files) {
+              const fullPath = path.join(dir, file);
+              const stat = fs.statSync(fullPath);
+              
+              if (stat.isDirectory()) {
+                // Ignore hidden folders like .git and node_modules
+                if (!file.startsWith('.') && file !== 'node_modules') {
+                  walk(fullPath);
+                }
+              } else {
+                const ext = path.extname(file).toLowerCase();
+                if (extensions.includes(ext)) {
+                  // Normalize path separators to forward slashes for the web
+                  const webPath = fullPath.split(path.sep).filter(p => p !== '.');
+                  
+                  // Ensure it's inside a folder, not just sitting in the root directory
+                  if (webPath.length > 1) {
+                    // Use the top-level folder name as the sample bank key (e.g., '808bd')
+                    const folder = webPath[0]; 
+                    
+                    if (!result[folder]) {
+                      result[folder] = [];
+                    }
+                    result[folder].push(webPath.join('/'));
+                  }
+                }
+              }
+            }
+          }
+
+          // Start scanning from the root
+          walk('.');
+
+          // Alphabetize the arrays for cleaner JSON
+          for (const key in result) {
+            if (Array.isArray(result[key])) {
+              result[key].sort();
+            }
+          }
+
+          // Write output to strudel.json
+          fs.writeFileSync('strudel.json', JSON.stringify(result, null, 0));
+          console.log("strudel.json successfully generated!");
+          EOF
+          
+          # Execute the script
+          node generate.js
+
+      - name: Commit and Push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: auto-generate strudel.json"
+          file_pattern: 'strudel.json'
