@@ -1,4 +1,4 @@
 ## JSON SAMPLE PAK 2 FOR STRUDEL REPL
 
 ### Credits:
-**Internet Archive - drum-machines-collection**: https://archive.org/download/drum-machines-collection
+***[November 15, 2023]* Unknown - drum machine samples**: https://archive.org/download/drum-machines-collection
